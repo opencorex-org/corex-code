@@ -1,0 +1,90 @@
+name: Bug Report
+description: Create a report to help us fix a bug in Corex Code
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please check existing issues first to see if it has already been reported.
+        **Note:** For security vulnerabilities, please refer to [docs/safety.md](https://github.com/lahiruudayakumara/corex-code/blob/main/docs/safety.md) and do not submit exploit details publicly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
+      placeholder: |
+        1. Run `corex` in repository '...'
+        2. Enter prompt '...'
+        3. Observe error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Corex Code Version
+      description: Run `corex --version` or inspect `package.json`.
+      placeholder: "e.g., 0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: bun-version
+    attributes:
+      label: Bun Version
+      description: Run `bun --version`.
+      placeholder: "e.g., 1.4.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian)
+        - Linux (Other)
+        - Windows (WSL)
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Ollama Model & Setup
+      description: Which model and provider configuration were you using?
+      placeholder: "e.g., qwen2.5-coder:7b via local Ollama"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal Output / Error Logs
+      description: Paste any error messages, stack traces, or relevant logs here.
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context or screenshots about the problem here.

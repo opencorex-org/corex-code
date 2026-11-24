@@ -1,0 +1,35 @@
+name: "Generate Release Asset Hashes"
+description: "Calculates SHA-256 checksum hashes for all release assets and generates SHA256SUMS.txt"
+
+inputs:
+  directory:
+    description: "Directory containing assets to hash"
+    required: false
+    default: "dist/release"
+  output-file:
+    description: "Output path for the checksum file"
+    required: false
+    default: "dist/release/SHA256SUMS.txt"
+  verify:
+    description: "Verify generated hashes after writing"
+    required: false
+    default: "true"
+
+outputs:
+  checksum-file:
+    description: "Path to the generated checksum file"
+    value: ${{ inputs.output-file }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate SHA-256 Checksums
+      shell: bash
+      run: |
+        bun run scripts/generate-hashes.ts "${{ inputs.directory }}" "${{ inputs.output-file }}"
+
+    - name: Verify Generated Hashes
+      if: inputs.verify == 'true'
+      shell: bash
+      run: |
+        bun run scripts/generate-hashes.ts --verify "${{ inputs.output-file }}"

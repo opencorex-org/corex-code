@@ -1,24 +1,192 @@
-name: Publish npm package
+name: Release
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g., v0.1.0)"
+        required: false
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+  attestations: write
 
 jobs:
-  publish:
+  validate:
+    name: Validate Suite
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
         with:
           bun-version: 1.4.5
-      - uses: actions/setup-node@v4
+          node-version: 22
+          install-ripgrep: true
+
+      - name: Run verification checks
+        run: bun run check
+
+      - name: Smoke test package
+        run: bun run smoke:package
+
+  build-binaries:
+    name: Build Binary (${{ matrix.platform }})
+    needs: [validate]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            target: bun-linux-x64
+          - os: ubuntu-latest
+            platform: linux-arm64
+            target: bun-linux-arm64
+          - os: macos-latest
+            platform: darwin-arm64
+            target: bun-darwin-arm64
+          - os: macos-latest
+            platform: darwin-x64
+            target: bun-darwin-x64
+          - os: ubuntu-latest
+            platform: windows-x64
+            target: bun-windows-x64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Binary Archive
+        uses: ./.github/actions/build-binary
+        with:
+          target: ${{ matrix.target }}
+          platform: ${{ matrix.platform }}
+          output-dir: dist/release
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.platform }}
+          path: dist/release/*
+          retention-days: 1
+
+  package-npm:
+    name: Package NPM Archive
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          bun-version: 1.4.5
+          node-version: 22
+          install-ripgrep: false
+
+      - name: Build and Pack NPM
+        run: |
+          mkdir -p dist/release
+          bun run build
+          npm pack --pack-destination dist/release
+
+      - name: Upload NPM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-npm
+          path: dist/release/*.tgz
+          retention-days: 1
+
+  publish-release:
+    name: Publish Release Assets & Hashes
+    needs: [build-binaries, package-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/artifacts
+
+      - name: Stage Release Assets
+        run: |
+          mkdir -p dist/release
+          find dist/artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.tgz" \) -exec cp {} dist/release/ \;
+          ls -la dist/release
+
+      - name: Generate and Verify SHA-256 Hashes
+        uses: ./.github/actions/generate-hashes
+        with:
+          directory: dist/release
+          output-file: dist/release/SHA256SUMS.txt
+          verify: true
+
+      - name: Attest Release Assets Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/release/*"
+
+      - name: Upload Assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release' || github.event.inputs.tag != ''
+        with:
+          tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          files: |
+            dist/release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    name: Publish to NPM Registry
+    needs: [publish-release]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+
+      - name: Setup Node.js with NPM registry
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - run: bun install --frozen-lockfile
-      - run: npm publish --access public --provenance
+
+      - name: Install ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Publish to NPM with Provenance
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

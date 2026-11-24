@@ -36,6 +36,9 @@
   "scripts": {
     "dev": "bun run src/cli.ts",
     "build": "bun build src/cli.ts --target=bun --outfile=dist/corex.js --external=react-devtools-core",
+    "build:binary": "bun build src/cli.ts --compile --outfile=dist/corex --external=react-devtools-core",
+    "hashes": "bun run scripts/generate-hashes.ts",
+    "hashes:verify": "bun run scripts/generate-hashes.ts --verify",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "typecheck": "tsc --noEmit",

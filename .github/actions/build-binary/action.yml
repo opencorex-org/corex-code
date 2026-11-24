@@ -1,0 +1,65 @@
+name: "Build Single-File Binary Asset"
+description: "Compiles a standalone executable using Bun and packages it into a release archive"
+
+inputs:
+  target:
+    description: "Bun compile target (e.g., bun-linux-x64, bun-darwin-arm64)"
+    required: true
+  platform:
+    description: "Platform name (e.g., linux-x64, darwin-arm64, windows-x64)"
+    required: true
+  output-dir:
+    description: "Directory to save release archive"
+    required: false
+    default: "dist/release"
+
+outputs:
+  archive-path:
+    description: "Path to the created archive asset"
+    value: ${{ steps.package.outputs.archive_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Compile Standalone Executable
+      shell: bash
+      run: |
+        mkdir -p dist/bin
+        EXT=""
+        if [[ "${{ inputs.platform }}" == *"windows"* ]]; then
+          EXT=".exe"
+        fi
+        bun build src/cli.ts --compile --target=${{ inputs.target }} --outfile="dist/bin/corex${EXT}" --external=react-devtools-core
+
+    - name: Package Archive Asset
+      id: package
+      shell: bash
+      run: |
+        mkdir -p "${{ inputs.output-dir }}"
+        ARCHIVE_BASE="corex-${{ inputs.platform }}"
+        STAGE_DIR="dist/stage/${ARCHIVE_BASE}"
+        mkdir -p "${STAGE_DIR}"
+
+        EXT=""
+        if [[ "${{ inputs.platform }}" == *"windows"* ]]; then
+          EXT=".exe"
+        fi
+
+        cp "dist/bin/corex${EXT}" "${STAGE_DIR}/"
+        cp README.md LICENSE corex.config.example.json "${STAGE_DIR}/"
+
+        if [[ "${{ inputs.platform }}" == *"windows"* ]]; then
+          ARCHIVE_FILE="${{ inputs.output-dir }}/${ARCHIVE_BASE}.zip"
+          if command -v zip >/dev/null 2>&1; then
+            (cd dist/stage && zip -r "../../${ARCHIVE_FILE}" "${ARCHIVE_BASE}")
+          else
+            tar -czf "${{ inputs.output-dir }}/${ARCHIVE_BASE}.tar.gz" -C dist/stage "${ARCHIVE_BASE}"
+            ARCHIVE_FILE="${{ inputs.output-dir }}/${ARCHIVE_BASE}.tar.gz"
+          fi
+        else
+          ARCHIVE_FILE="${{ inputs.output-dir }}/${ARCHIVE_BASE}.tar.gz"
+          tar -czf "${ARCHIVE_FILE}" -C dist/stage "${ARCHIVE_BASE}"
+        fi
+
+        echo "archive_path=${ARCHIVE_FILE}" >> $GITHUB_OUTPUT
+        echo "Created release asset: ${ARCHIVE_FILE}"
